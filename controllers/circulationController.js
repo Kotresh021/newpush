@@ -8,6 +8,7 @@ import sendEmail from '../utils/sendEmail.js';
 
 // @desc    Issue a Book (Atomic Check & Set)
 // @route   POST /api/circulation/issue
+// @desc    Issue a Book (Atomic Check & Set)
 export const issueBook = async (req, res) => {
     const { studentId, isbn, copyId } = req.body;
 
@@ -27,17 +28,19 @@ export const issueBook = async (req, res) => {
         let targetCopy;
 
         if (copyId) {
+            // 🔒 OPTIMIZED: ATOMIC UPDATE
+            // Finds and updates in one go. If status was not 'Available', it returns null.
             targetCopy = await BookCopy.findOneAndUpdate(
                 { copyNumber: copyId, status: 'Available' },
                 { status: 'Issued' },
                 { new: true }
             );
-            if (!targetCopy) return res.status(400).json({ message: 'Copy is not available (Already Issued or Lost)' });
+            if (!targetCopy) return res.status(409).json({ message: 'Copy is unavailable or already issued.' });
         } else {
             const book = await Book.findOne({ isbn });
             if (!book) return res.status(404).json({ message: 'Book ISBN not found' });
 
-            //Using 'book' (the object ID field) instead of 'bookId'
+            // 🔒 OPTIMIZED: Find any available copy for this book and lock it
             targetCopy = await BookCopy.findOneAndUpdate(
                 { book: book._id, status: 'Available' },
                 { status: 'Issued' },
@@ -46,7 +49,7 @@ export const issueBook = async (req, res) => {
             if (!targetCopy) return res.status(400).json({ message: 'No copies currently available' });
         }
 
-        // Using 'targetCopy.book' for the ID reference
+        // Decrement available count
         await Book.findByIdAndUpdate(targetCopy.book, { $inc: { availableCopies: -1 } });
 
         const dueDate = new Date();
@@ -54,7 +57,7 @@ export const issueBook = async (req, res) => {
 
         const transaction = await Transaction.create({
             student: student._id,
-            book: targetCopy.book, // Correct field name for Transaction
+            book: targetCopy.book,
             copyId: targetCopy.copyNumber,
             dueDate,
             status: 'Issued',
@@ -71,6 +74,7 @@ export const issueBook = async (req, res) => {
         });
 
     } catch (error) {
+        // Rollback status if transaction creation failed (Unlikely but safe)
         if (req.body.copyId) {
             await BookCopy.findOneAndUpdate({ copyNumber: req.body.copyId }, { status: 'Available' });
         }

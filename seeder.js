@@ -4,7 +4,7 @@ import User from './models/User.js'; // Ensure this path matches your User model
 
 // 👇 PASTE YOUR MONGODB ATLAS CONNECTION STRING HERE
 // (The one that looks like: mongodb+srv://admin:password@cluster...)
-const MONGO_URI = "mongodb://localhost:27017/College_Library";
+const MONGO_URI = "mongodb+srv://LMSAdmin:8oSTt2UMyQ1JiYM4@clusterlms.r1c7fas.mongodb.net/?appName=ClusterLMS";
 
 const createAdmin = async () => {
     try {

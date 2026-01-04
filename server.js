@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 
+// --- SECURITY PACKAGES ---
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+import xss from 'xss-clean';
+import hpp from 'hpp';
+
 // Import Routes
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -18,10 +25,40 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Use Routes
+// --- SECURITY MIDDLEWARE ---
+
+// 1. Secure HTTP Headers
+app.use(helmet());
+
+// 2. Rate Limiting (Prevents Brute Force/DDoS)
+const limiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 150, // Limit each IP to 150 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api', limiter);
+
+// 3. Body Parser with Limit (Prevents DOS via large payloads)
+app.use(express.json({ limit: '10kb' }));
+
+// 4. Data Sanitization against NoSQL Injection
+app.use(mongoSanitize());
+
+// 5. Data Sanitization against XSS
+app.use(xss());
+
+// 6. Prevent Parameter Pollution
+app.use(hpp());
+
+// 7. CORS (Allow credentials)
+app.use(cors({
+    origin: '*', // Change this to your specific frontend domain in production
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+}));
+
+// --- ROUTES ---
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/departments', deptRoutes);
